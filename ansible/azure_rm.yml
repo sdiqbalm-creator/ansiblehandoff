@@ -1,0 +1,52 @@
+# =======================================================================
+# ansible/azure_rm.yml — Ansible dynamic inventory plugin config
+#
+# WHAT THIS DOES:
+# Instead of reading a static inventory.ini file written by Terraform,
+# Ansible calls the Azure API at runtime and discovers VMs automatically.
+# It then groups them by tag — any VM with role=webserver becomes part
+# of the [webservers] host group that the playbook targets.
+#
+# WHY THIS IS BETTER THAN A STATIC FILE:
+# - If a VM is recreated and gets a new IP, Ansible finds it automatically.
+# - If you scale to 50 VMs, zero changes needed here.
+# - If a VM is deleted, it disappears from the inventory instantly.
+# - No Terraform/Ansible coupling — run Ansible anytime, independently.
+#
+# PREREQUISITES:
+#   pip install ansible
+#   ansible-galaxy collection install azure.azcollection
+#   pip install -r ~/.ansible/collections/ansible_collections/azure/azcollection/requirements.txt
+#   az login   (or set AZURE_* env vars for a service principal)
+#
+# HOW TO RUN:
+#   ansible-playbook -i ansible/azure_rm.yml ansible/playbook.yml
+#
+# TO VERIFY WHAT HOSTS ANSIBLE DISCOVERS:
+#   ansible-inventory -i ansible/azure_rm.yml --list
+# =======================================================================
+
+plugin: azure.azcollection.azure_rm
+
+# Scope to only the resource group for this environment
+include_vm_resource_groups:
+  - ansibletest-rg
+
+# Group VMs by their 'role' tag value.
+# Any VM tagged role=webserver joins the [webservers] group.
+# Add more entries here for other roles (e.g. databases, monitoring).
+conditional_groups:
+  webservers: "'webserver' in tags.get('role', '')"
+
+# Use plain VM names as hostnames (not the full Azure resource ID)
+plain_host_names: true
+
+# Variables attached to every host at runtime.
+# {{ resource_group }} and {{ name }} are provided by the azure_rm plugin
+# for every VM it discovers — no hardcoded values.
+hostvar_expressions:
+  ansible_user: "'azureuser'"
+  ansible_ssh_common_args: >-
+    "'-o ProxyCommand=\"az ssh proxy --resource-group {{ resource_group }} --vm-name {{ name }} --port %p\"
+     -o StrictHostKeyChecking=no
+     -o ConnectTimeout=30'"

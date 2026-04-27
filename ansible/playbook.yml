@@ -1,0 +1,73 @@
+---
+# =======================================================================
+# ansible/playbook.yml — Web server configuration playbook
+#
+# Unchanged from scenario6. The playbook itself does not care how it
+# was invoked or what inventory source was used. It targets the
+# [webservers] group — which is now populated dynamically by the
+# azure_rm plugin rather than a static inventory.ini file.
+#
+# HOW TO RUN:
+#   ansible-playbook -i ansible/azure_rm.yml ansible/playbook.yml
+#
+# HOW TO RUN WITH VERBOSE OUTPUT:
+#   ansible-playbook -i ansible/azure_rm.yml ansible/playbook.yml -v
+# =======================================================================
+
+- name: Configure Web Server
+  hosts: webservers
+  become: yes
+  gather_facts: yes
+
+  tasks:
+
+    - name: Wait for VM to be ready (SSH can connect before cloud-init finishes)
+      wait_for_connection:
+        delay: 10
+        timeout: 120
+
+    - name: Update apt package cache
+      apt:
+        update_cache: yes
+        cache_valid_time: 3600
+
+    - name: Install nginx
+      apt:
+        name: nginx
+        state: present
+
+    - name: Ensure nginx is started and enabled at boot
+      service:
+        name: nginx
+        state: started
+        enabled: yes
+
+    - name: Deploy custom index.html
+      copy:
+        dest: /var/www/html/index.html
+        owner: www-data
+        group: www-data
+        mode: '0644'
+        content: |
+          <!DOCTYPE html>
+          <html>
+            <head><title>Deployed by Terraform + Ansible</title></head>
+            <body>
+              <h1>Deployment Successful</h1>
+              <p><strong>Hostname:</strong> {{ ansible_hostname }}</p>
+              <p><strong>IP Address:</strong> {{ ansible_default_ipv4.address }}</p>
+              <p><strong>OS:</strong> {{ ansible_distribution }} {{ ansible_distribution_version }}</p>
+              <p><strong>Provisioned by:</strong> Terraform (infra) + Ansible (config)</p>
+              <p><strong>Environment:</strong> dev</p>
+            </body>
+          </html>
+
+    - name: Verify nginx is responding on port 80 (self-test)
+      uri:
+        url: "http://localhost"
+        status_code: 200
+      register: nginx_check
+
+    - name: Print verification result
+      debug:
+        msg: "nginx is responding — HTTP {{ nginx_check.status }}. Deployment complete."
