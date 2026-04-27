@@ -12,3 +12,8 @@ output "vm_id" {
   value       = azurerm_linux_virtual_machine.vm.id
   description = "Resource ID of the VM"
 }
+
+output "managed_identity_principal_id" {
+  value       = azurerm_linux_virtual_machine.vm.identity[0].principal_id
+  description = "Principal ID of the VM's system-assigned managed identity. Use this to grant RBAC roles to the VM identity."
+}
